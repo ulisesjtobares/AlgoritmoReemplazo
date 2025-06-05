@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Simulador de Reemplazo de Páginas</title>
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #2c3e50;
+    color: #ecf0f1;
+    margin: 0; padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+  }
+  h1 {
+    color: #3498db;
+    margin-bottom: 20px;
+  }
+  .contenedor {
+    background: #34495e;
+    padding: 20px 30px;
+    border-radius: 12px;
+    max-width: 600px;
+    width: 100%;
+    box-sizing: border-box;
+    box-shadow: 0 0 15px #2980b9;
+  }
+  label {
+    display: block;
+    margin-top: 15px;
+    font-weight: 600;
+  }
+  input[type=text], input[type=number] {
+    width: 100%;
+    font-size: 1rem;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: none;
+    margin-top: 6px;
+    box-sizing: border-box;
+  }
+  .algoritmos {
+    margin: 15px 0;
+  }
+  .algoritmos label {
+    font-weight: normal;
+    margin-right: 15px;
+    cursor: pointer;
+  }
+  button {
+    margin-top: 15px;
+    padding: 12px 24px;
+    font-size: 1.1rem;
+    border-radius: 10px;
+    background-color: #2980b9;
+    border: none;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  button:disabled {
+    background-color: #7f8c8d;
+    cursor: not-allowed;
+  }
+  button:hover:not(:disabled) {
+    background-color: #1f5f86;
+  }
+  pre {
+    background-color: #1a252f;
+    padding: 15px;
+    margin-top: 20px;
+    border-radius: 10px;
+    font-family: monospace;
+    max-height: 300px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
+  .estadisticas {
+    margin-top: 15px;
+    font-weight: bold;
+    font-size: 1.1rem;
+    color: #f39c12;
+  }
+</style>
+</head>
+<body>
+<div class="contenedor" role="main" aria-label="Simulador de Reemplazo de Páginas">
+  <h1>Simulador de Reemplazo de Páginas</h1>
+
+  <label for="secuencia">Secuencia de referencias de página (separadas por comas):</label>
+  <input type="text" id="secuencia" placeholder="Ejemplo: 7,0,1,2,0,3,0,4" aria-required="true" />
+
+  <label for="tamanoMarco">Tamaño del marco (número de marcos):</label>
+  <input type="number" id="tamanoMarco" min="1" max="10" value="3" aria-required="true" />
+
+  <div class="algoritmos" role="radiogroup" aria-label="Selección del algoritmo de reemplazo de página">
+    <label><input type="radio" name="algoritmo" value="FIFO" checked /> FIFO</label>
+    <label><input type="radio" name="algoritmo" value="LRU" /> LRU</label>
+    <label><input type="radio" name="algoritmo" value="LIFO" /> LIFO</label>
+  </div>
+
+  <button id="btnSimular">Iniciar simulación</button>
+
+  <pre id="salida" tabindex="0" aria-live="polite"></pre>
+  <div class="estadisticas" id="estadisticas" aria-live="polite"></div>
+</div>
+
+<script>
+(function(){
+  const secuenciaInput = document.getElementById('secuencia');
+  const tamanoInput = document.getElementById('tamanoMarco');
+  const btnSimular = document.getElementById('btnSimular');
+  const salida = document.getElementById('salida');
+  const estadisticasDiv = document.getElementById('estadisticas');
+
+  function parsearSecuencia(texto) {
+    const partes = texto.split(',');
+    const paginas = [];
+    for(let p of partes){
+      p = p.trim();
+      if(p === '') continue;
+      const n = Number(p);
+      if(isNaN(n) || !Number.isInteger(n) || n < 0){
+        return null;
+      }
+      paginas.push(n);
+    }
+    return paginas.length > 0 ? paginas : null;
+  }
+
+  function obtenerAlgoritmoSeleccionado(){
+    const radios = document.getElementsByName('algoritmo');
+    for (const r of radios) {
+      if (r.checked) return r.value;
+    }
+    return 'FIFO';
+  }
+
+  function formatearColumna(valor) {
+    return valor ? ' Sí   ' : ' No    ';
+  }
+
+  // FIFO
+  function algoritmoFIFO(paginas, tamanioMarco) {
+    const marcos = [];
+    let fallos = 0;
+    let reemplazos = 0;
+    let indiceReemplazo = 0;
+    const lineas = [];
+
+    lineas.push('--- Simulación FIFO ---\n');
+    lineas.push(`Tamaño de marcos: ${tamanioMarco}\n`);
+    lineas.push('Paso | Página | Marcos         | Lleno | Reemplazo');
+    lineas.push('-----+--------+----------------+-------+----------');
+
+    paginas.forEach((pagina, i) => {
+      const estaEnMarco = marcos.includes(pagina);
+      let lleno = marcos.length === tamanioMarco;
+      let reemplazo = false;
+
+      if(!estaEnMarco){
+        fallos++;
+        if(!lleno){
+          marcos.push(pagina);
+        } else {
+          marcos[indiceReemplazo] = pagina;
+          indiceReemplazo = (indiceReemplazo + 1) % tamanioMarco;
+          reemplazos++;
+          reemplazo = true;
+        }
+      }
+
+      let estadoMarcos = [...marcos];
+      while(estadoMarcos.length < tamanioMarco) estadoMarcos.push('-');
+
+      lineas.push(
+        `${String(i+1).padStart(4)} | ${String(pagina).padStart(6)} | ${estadoMarcos.join(', ').padEnd(14)} |${formatearColumna(lleno)}|${formatearColumna(reemplazo)}`
+      );
+    });
+
+    return {lineas, fallos, reemplazos};
+  }
+
+  // LRU
+  function algoritmoLRU(paginas, tamanioMarco) {
+    let marcos = [];
+    let fallos = 0;
+    let reemplazos = 0;
+    const lineas = [];
+
+    lineas.push('--- Simulación LRU ---\n');
+    lineas.push(`Tamaño de marcos: ${tamanioMarco}\n`);
+    lineas.push('Paso | Página | Marcos         | Lleno | Reemplazo');
+    lineas.push('-----+--------+----------------+-------+----------');
+
+    paginas.forEach((pagina, i) => {
+      const estaEnMarco = marcos.includes(pagina);
+      let lleno = marcos.length === tamanioMarco;
+      let reemplazo = false;
+
+      if(!estaEnMarco){
+        fallos++;
+        if(!lleno){
+          marcos.push(pagina);
+        } else {
+          marcos.shift();
+          marcos.push(pagina);
+          reemplazos++;
+          reemplazo = true;
+        }
+      } else {
+        marcos = marcos.filter(p => p !== pagina);
+        marcos.push(pagina);
+      }
+
+      let estadoMarcos = [...marcos];
+      while(estadoMarcos.length < tamanioMarco) estadoMarcos.push('-');
+
+      lineas.push(
+        `${String(i+1).padStart(4)} | ${String(pagina).padStart(6)} | ${estadoMarcos.join(', ').padEnd(14)} |${formatearColumna(lleno)}|${formatearColumna(reemplazo)}`
+      );
+    });
+
+    return {lineas, fallos, reemplazos};
+  }
+
+  // LIFO
+  function algoritmoLIFO(paginas, tamanioMarco) {
+    const marcos = [];
+    let fallos = 0;
+    let reemplazos = 0;
+    const lineas = [];
+
+    lineas.push('--- Simulación LIFO ---\n');
+    lineas.push(`Tamaño de marcos: ${tamanioMarco}\n`);
+    lineas.push('Paso | Página | Marcos         | Lleno | Reemplazo');
+    lineas.push('-----+--------+----------------+-------+----------');
+
+    paginas.forEach((pagina, i) => {
+      const estaEnMarco = marcos.includes(pagina);
+      let lleno = marcos.length === tamanioMarco;
+      let reemplazo = false;
+
+      if(!estaEnMarco){
+        fallos++;
+        if(!lleno){
+          marcos.push(pagina);
+        } else {
+          // Reemplazar el más reciente (último ingresado), diferencia con FIFO y LRU
+          marcos.pop();
+          marcos.push(pagina);
+          reemplazos++;
+          reemplazo = true;
+        }
+      }
+
+      let estadoMarcos = [...marcos];
+      while(estadoMarcos.length < tamanioMarco) estadoMarcos.push('-');
+
+      lineas.push(
+        `${String(i+1).padStart(4)} | ${String(pagina).padStart(6)} | ${estadoMarcos.join(', ').padEnd(14)} |${formatearColumna(lleno)}|${formatearColumna(reemplazo)}`
+      );
+    });
+
+    return {lineas, fallos, reemplazos};
+  }
+
+  btnSimular.addEventListener('click', () => {
+    salida.textContent = '';
+    estadisticasDiv.textContent = '';
+
+    const secuencia = parsearSecuencia(secuenciaInput.value);
+    if(!secuencia){
+      alert('Por favor, ingresa una secuencia válida de números enteros no negativos separados por comas.');
+      return;
+    }
+
+    const tamano = Number(tamanoInput.value);
+    if(isNaN(tamano) || tamano < 1 || tamano > 10){
+      alert('El tamaño del marco debe ser un entero entre 1 y 10.');
+      return;
+    }
+
+    const algoritmo = obtenerAlgoritmoSeleccionado();
+
+    btnSimular.disabled = true;
+    btnSimular.textContent = 'Simulando...';
+
+    setTimeout(() => {
+      let resultado;
+      if(algoritmo === 'FIFO'){
+        resultado = algoritmoFIFO(secuencia, tamano);
+      } else if (algoritmo === 'LRU'){
+        resultado = algoritmoLRU(secuencia, tamano);
+      } else {
+        resultado = algoritmoLIFO(secuencia, tamano);
+      }
+
+      salida.textContent = resultado.lineas.join('\n');
+      estadisticasDiv.textContent = `\nSimulación finalizada.\nCantidad total de fallos: ${resultado.fallos}\nCantidad total de reemplazos: ${resultado.reemplazos}`;
+
+      btnSimular.disabled = false;
+      btnSimular.textContent = 'Iniciar simulación';
+      salida.focus();
+    }, 100);
+  });
+})();
+</script>
+</body>
+</html>
+
